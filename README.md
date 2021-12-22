@@ -4,7 +4,7 @@ Parameter estimation on epidemic data under the [SIR model][sir] using a novel a
 [uniformization][uniformization] of [Markov transition rate matrices][markov] in
 [tensor representation][tensor].
 
-This repository contains the code for the paper *TODO link paper*.
+This repository contains the code for [the paper][paper].
 
 ## Data
 
@@ -74,6 +74,7 @@ architecture.
 [uniformization]: https://en.wikipedia.org/wiki/Uniformization_(probability_theory)
 [markov]: https://en.wikipedia.org/wiki/Transition_rate_matrix
 [tensor]: https://en.wikipedia.org/wiki/Tensor_product#Tensor_product_of_linear_maps
+[paper]: https://arxiv.org/abs/2112.10971
 [data-src]: https://www.data.gv.at/katalog/dataset/ef8e980b-9644-45d8-b0e9-c6aaf0eff0c0
 [csv]: cache/data-austria.csv
 [hmc]: results/plots/austria-hmc.png
