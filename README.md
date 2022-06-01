@@ -4,7 +4,7 @@ Parameter estimation on epidemic data under the [SIR model][sir] using a novel a
 [uniformization][uniformization] of [Markov transition rate matrices][markov] in
 [tensor representation][tensor].
 
-This repository contains the code for [the paper][paper].
+This repository contains the code for the manuscript [Differentiated uniformization: A new method for inferring Markov chains on combinatorial state spaces including stochastic epidemic models][paper].
 
 ## Data
 
