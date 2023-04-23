@@ -2,7 +2,7 @@ from multiprocessing import Pool
 
 import numpy as np
 
-from tensir.tensormath import shuffle_diag
+from tensir.uniformization._tensormath import shuffle_diag
 
 np.seterr(divide="ignore", under="ignore", invalid="ignore")  # suppress log(0), exp(-inf), log(-x) warnings
 

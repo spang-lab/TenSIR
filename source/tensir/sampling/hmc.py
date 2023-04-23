@@ -1,67 +1,12 @@
-import itertools
 import logging
+import os.path
 import os.path
 import pickle
 import time
 
 import numpy as np
 
-from tensir import derivative, forward, deterministic
-
-
-def _calculate_error(data, Theta, duration, steps):
-    SIR0 = data[0, 1:]
-    solution = deterministic.solve_sir(SIR0, Theta, duration, steps)
-
-    SI_data = data[:, 1:3]
-    SI_solved = solution[:, 1:3]
-
-    return np.sum((SI_data - SI_solved) ** 2)
-
-
-def grid_search_deterministic(data, Theta_min, Theta_max, resolution):
-    duration = data[-1, 0] - data[0, 0]
-    steps = data.shape[0]
-
-    alpha_range, beta_range = zip(Theta_min, Theta_max)
-
-    grid = list(itertools.product(np.logspace(*np.log10(alpha_range), resolution),
-                                  np.logspace(*np.log10(beta_range), resolution)))
-
-    min_error = np.inf
-    best_Theta = None
-    for Theta in grid:
-
-        error = _calculate_error(data, Theta, duration, steps)
-        if error < min_error:
-            min_error = error
-            best_Theta = Theta
-
-    return best_Theta
-
-
-def gradient_ascent(data, Theta0, lr, conv, threads=1):
-    """
-    Learns the parameter `theta` on `data` under the SIR model, starting at `theta0`.
-
-    :param data: Numpy array with columns t, S, I, R
-    :param Theta0: Initial (alpha, beta) of the SIR model
-    :param lr: Learning rate
-    :param conv: Converged if all(abs(old_theta - new_theta) <= conv)
-    :param threads: Run the code in parallel (will make use of floor(threads / 2) * 2 threads)
-    :return: Learned [alpha, beta]
-    """
-
-    Theta = Theta0
-    old_Theta = np.array([np.inf, np.inf])
-    while np.any(np.abs(old_Theta - Theta) > conv):
-        gradient, ll = derivative.log_likelihood_gradient_dataset(data, Theta, threads=threads)
-        old_Theta = Theta
-        Theta = np.exp(np.log(Theta) + lr * gradient)
-        logging.info(
-            f"Theta: {old_Theta}, LL: {ll}, Theta_new: {Theta}, Gradient: {gradient}, abs(Delta): {np.abs(old_Theta - Theta)}")
-
-    return Theta
+from tensir.uniformization import derivative, forward
 
 
 def _leapfrog(data, theta, p, M_i, e, grad, threads):

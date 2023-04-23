@@ -6,7 +6,7 @@ from cachetools import cached
 from cachetools.keys import hashkey
 
 from tensir._pool import NestablePool
-from tensir.tensormath import shuffle_diag
+from tensir.uniformization._tensormath import shuffle_diag
 
 
 def _differentiated_uniformization(args):

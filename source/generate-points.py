@@ -7,7 +7,7 @@ import numpy as np
 
 from paths import AUSTRIA_DATA_CACHE_PATH, AUSTRIA_MONTHLY_HMC_POINTS_DIR, LOGS_DIR, HMC_STATES_DIR
 from tensir import data
-from tensir.optimize import hamiltonian_monte_carlo_fixed_count
+from tensir.sampling.hmc import hamiltonian_monte_carlo_fixed_count
 
 
 def main():

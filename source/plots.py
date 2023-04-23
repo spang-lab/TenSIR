@@ -38,8 +38,8 @@ def density_plots(show=False, output_stats=False):
 
     titles = ["March 2020", "April 2020", "May 2020", "June 2020", "July 2020", "August 2020"]
 
-    grid_searched = [tensir.optimize.grid_search_deterministic(
-        data.real.covid19_austria_daily(f"2020-0{m}-01", f"2020-0{m + 1}-01", cache_path=AUSTRIA_DATA_CACHE_PATH),
+    grid_searched = [tensir.optimize.grid.grid_search_deterministic(
+        data.covid19_austria_daily(f"2020-0{m}-01", f"2020-0{m + 1}-01", cache_path=AUSTRIA_DATA_CACHE_PATH),
         (xlim[0], ylim[0]), (xlim[1], ylim[1]), 40)
         for m in range(3, 9)]
 
@@ -111,7 +111,7 @@ def timeline_plot(show=False):
     rcParams["axes.labelsize"] = 15
     rcParams["xtick.labelsize"] = 15
 
-    data_sir = data.real.covid19_austria_daily("2020-03-01", "2020-09-01", cache_path=AUSTRIA_DATA_CACHE_PATH)
+    data_sir = data.covid19_austria_daily("2020-03-01", "2020-09-01", cache_path=AUSTRIA_DATA_CACHE_PATH)
 
     df = pd.DataFrame(data_sir, columns=["t", "S", "I", "R"])
     df["t"] = df["t"].apply(lambda t: dt.datetime(2020, 3, 1) + dt.timedelta(days=t))
@@ -155,8 +155,10 @@ def timeline_plot(show=False):
 
 
 def main():
-    density_plots(show=True, output_stats=True)
-    timeline_plot(show=True)
+    # density_plots(show=True, output_stats=True)
+    trace_plot(show=True)
+    # psrf_plot(show=True)
+    # timeline_plot(show=True)
 
 
 if __name__ == '__main__':
