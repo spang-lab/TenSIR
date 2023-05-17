@@ -6,31 +6,41 @@ import time
 
 import numpy as np
 
+from tensir.bounds_util import inside_bounds
 from tensir.uniformization import derivative, forward
 
 
-def _leapfrog(data, theta, p, M_i, e, grad, threads):
-    if grad is None:  # take previous gradient if available
-        grad, ll = derivative.log_likelihood_gradient_dataset_cached(data, np.exp(theta), threads)
+def _leapfrog(data, theta, prior_bounds, p, M_i, e, grad, threads):
+    if grad is None:  # if no previous gradient available
+        if inside_bounds(np.exp(theta), prior_bounds):
+            grad, ll = derivative.log_likelihood_gradient_dataset_cached(data, np.exp(theta), threads)
+        else:
+            grad, ll = np.array([np.inf, np.inf]), -np.inf
+
         logging.info(f"      Theta: {np.exp(theta)}, Gradient: {grad}, LL: {ll}, p: {p}")
-        if np.any(grad == np.inf):  # exit if gradient = inf
+        if np.any(np.isinf(grad)):  # exit if gradient = inf
             return theta, p, ll, grad
     p = p + e * 0.5 * grad
     theta = theta + e * np.dot(M_i, p)
-    grad, ll = derivative.log_likelihood_gradient_dataset_cached(data, np.exp(theta), threads)
+
+    if inside_bounds(np.exp(theta), prior_bounds):
+        grad, ll = derivative.log_likelihood_gradient_dataset_cached(data, np.exp(theta), threads)
+    else:
+        grad, ll = np.array([np.inf, np.inf]), -np.inf
+
     logging.info(f"      Theta: {np.exp(theta)}, Gradient: {grad}, LL: {ll}, p: {p}")
     p = p + e * 0.5 * grad
     return theta, p, ll, grad
 
 
-def _hmc_one_iteration(data, theta, ll, M, M_i, e, L, threads):
+def _hmc_one_iteration(data, theta, prior_bounds, ll, M, M_i, e, L, threads):
     p = np.random.multivariate_normal(np.zeros(2), M)
 
     theta_new, p_new, ll_new, grad_new = theta, p, None, None
     for i in range(L):
         logging.info(f"  i={i}, ll={ll if ll_new is None else ll_new}")
-        theta_new, p_new, ll_new, grad_new = _leapfrog(data, theta_new, p_new, M_i, e, grad_new, threads)
-        if np.any(grad_new == np.inf):
+        theta_new, p_new, ll_new, grad_new = _leapfrog(data, theta_new, prior_bounds, p_new, M_i, e, grad_new, threads)
+        if np.any(np.isinf(grad_new)):
             logging.warning("Gradient has inf, aborting leapfrogs")
             break
 
@@ -41,7 +51,7 @@ def _hmc_one_iteration(data, theta, ll, M, M_i, e, L, threads):
     a = ll - 0.5 * np.dot(np.dot(p, M_i), p)
     alpha = min(1, np.exp(a_new - a))  # subtract here instead of dividing outside of exp
 
-    if a_new == -np.inf or np.any(grad_new == np.inf):
+    if np.isinf(a_new) or np.any(np.isinf(grad_new)):
         alpha = 0.
 
     if np.random.random() < 1 - alpha:  # discard with probability 1 - alpha
@@ -51,7 +61,8 @@ def _hmc_one_iteration(data, theta, ll, M, M_i, e, L, threads):
     return theta_new, ll_new, alpha
 
 
-def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load_state=None, save_state=None):
+def hamilton_monte_carlo_iterator(data, Theta0, prior_bounds, M, e, L, N=None, threads=1, load_state=None,
+                                  save_state=None):
     """
     Run Hamiltonian Monte Carlo simulation on data under the SIR model, starting at `Theta0`.
     This function acts as a generator that yields the next `(log(alpha), log(beta))` point.
@@ -63,6 +74,7 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta0: Initial (alpha, beta) of the SIR model
+    :param prior_bounds: Bounds of the uniform prior (non-logarithmic)
     :param M: Covariance matrix of the HMC
     :param e: Epsilon parameter of the HMC
     :param L: L parameter of the HMC
@@ -80,6 +92,8 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
     else:
         theta = np.log(Theta0)
         yield theta
+        if not inside_bounds(Theta0, prior_bounds):
+            raise ValueError(f"Theta0 {Theta0} is not in prior bounds {prior_bounds}")
         ll = forward.log_likelihood_dataset(data, Theta0, threads=threads)
 
     logging.info("Start")
@@ -94,7 +108,7 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
     while t != N:  # works if N is None
         logging.info(f"t={t}")
 
-        theta_new, ll_new, alpha = _hmc_one_iteration(data, theta, ll, M, M_i, e, L, threads)
+        theta_new, ll_new, alpha = _hmc_one_iteration(data, theta, prior_bounds, ll, M, M_i, e, L, threads)
 
         logging.info(f"alpha={alpha:.5f}")
         alphas.append(alpha)
@@ -119,7 +133,7 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
         t += 1
 
 
-def hamiltonian_monte_carlo_fixed_count(data, Theta0, M, e, L, count, threads=1, save_intermediate=None,
+def hamiltonian_monte_carlo_fixed_count(data, Theta0, prior_bounds, M, e, L, count, threads=1, save_intermediate=None,
                                         load_state=None, save_state=None):
     """
     Run Hamiltonian Monte Carlo simulation on data under the SIR model, starting at `Theta0`.
@@ -131,6 +145,7 @@ def hamiltonian_monte_carlo_fixed_count(data, Theta0, M, e, L, count, threads=1,
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta0: Initial (alpha, beta) of the SIR model
+    :param prior_bounds: Bounds of the uniform prior (non-logarithmic)
     :param M: Covariance matrix of the HMC
     :param e: Epsilon parameter of the HMC
     :param L: L parameter of the HMC
@@ -152,8 +167,8 @@ def hamiltonian_monte_carlo_fixed_count(data, Theta0, M, e, L, count, threads=1,
     else:
         points = []
 
-    for point in hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=threads, load_state=load_state,
-                                               save_state=save_state):
+    for point in hamilton_monte_carlo_iterator(data, Theta0, prior_bounds, M, e, L, N=None, threads=threads,
+                                               load_state=load_state, save_state=save_state):
 
         if save_intermediate is not None:
             with open(save_intermediate, "a") as f:

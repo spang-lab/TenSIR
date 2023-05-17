@@ -10,6 +10,7 @@ import typer
 from paths import AUSTRIA_DATA_CACHE_PATH, HMC_STATES_DIR, MH_LOGS_DIR, \
     HMC_LOGS_DIR, MH_POINTS_DIR, HMC_POINTS_DIR, MH_STATES_DIR
 from tensir import data
+from tensir.bounds_util import inside_bounds
 from tensir.sampling.hmc import hamiltonian_monte_carlo_fixed_count
 from tensir.sampling.mh import metropolis_hastings_fixed_count
 
@@ -69,17 +70,21 @@ def main(
 
     logging.info(f"Hyperparameters: {hmc_m=}, {hmc_e=}, {hmc_l=}, {mh_v=}")
 
+    prior_bounds = (0.01, 1.)
+
     # parameters are in the log normally distributed with a mean of about 0.05
     Theta0 = np.exp(np.random.normal(loc=-3, scale=0.2, size=2))
+    while not inside_bounds(Theta0, prior_bounds):
+        Theta0 = np.exp(np.random.normal(loc=-3, scale=0.2, size=2))
 
     if sampling == Sampling.HMC:
-        points = hamiltonian_monte_carlo_fixed_count(data_sir, Theta0=Theta0,
+        points = hamiltonian_monte_carlo_fixed_count(data_sir, Theta0=Theta0, prior_bounds=prior_bounds,
                                                      M=np.eye(2) * hmc_m, e=hmc_e, L=hmc_l,
                                                      count=points, threads=threads,
                                                      save_intermediate=join(intermediate_dir, csv_name),
                                                      load_state=state_path, save_state=state_path)
     elif sampling == Sampling.MH:
-        points = metropolis_hastings_fixed_count(data_sir, Theta0=Theta0, v=mh_v,
+        points = metropolis_hastings_fixed_count(data_sir, Theta0=Theta0, prior_bounds=prior_bounds, v=mh_v,
                                                  count=points, threads=threads,
                                                  save_intermediate=join(intermediate_dir, csv_name),
                                                  load_state=state_path, save_state=state_path)

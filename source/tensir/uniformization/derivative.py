@@ -97,7 +97,7 @@ def _differentiated_uniformization(args):
     if pt[state1] <= 0.:  # numerical imprecisions, also define 0 / 0 := inf
         if pt_d[state1] != 0.:
             logging.warning("x/0 encountered: pt_d accumulated values, but pt didn't")
-        return np.inf, 0.  # return inf gradient and 0 ll
+        return np.inf, 0.  # return inf gradient and 0 likelihood
 
     return pt_d[state1] / pt[state1], pt[state1]
 

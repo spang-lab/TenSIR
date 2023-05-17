@@ -5,13 +5,17 @@ import time
 
 import numpy as np
 
+from tensir.bounds_util import inside_bounds
 from tensir.uniformization import forward
 
 
-def _mh_one_iteration(data, theta, ll, v, threads):
+def _mh_one_iteration(data, theta, prior_bounds, ll, v, threads):
     theta_new = np.random.normal(theta, np.sqrt(v), size=2)
 
-    ll_new = forward.log_likelihood_dataset(data, np.exp(theta_new), threads=threads)
+    if inside_bounds(np.exp(theta), prior_bounds):
+        ll_new = forward.log_likelihood_dataset(data, np.exp(theta_new), threads=threads)
+    else:
+        ll_new = -np.inf
     alpha = min(1, np.exp(ll_new - ll))  # likelihood is being held logarithmically
 
     logging.info(f"Theta: {np.exp(theta_new)}, ll={ll_new}")
@@ -23,7 +27,7 @@ def _mh_one_iteration(data, theta, ll, v, threads):
     return theta_new, ll_new, alpha
 
 
-def metropolis_hastings_iterator(data, Theta0, v, N=None, threads=1, load_state=None, save_state=None):
+def metropolis_hastings_iterator(data, Theta0, prior_bounds, v, N=None, threads=1, load_state=None, save_state=None):
     """
     Run Metropolis-Hastings simulation on data under the SIR model, starting at `Theta0`.
     This function acts as a generator that yields the next `(log(alpha), log(beta))` point.
@@ -35,6 +39,7 @@ def metropolis_hastings_iterator(data, Theta0, v, N=None, threads=1, load_state=
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta0: Initial (alpha, beta) of the SIR model
+    :param prior_bounds: Bounds of the uniform prior (non-logarithmic)
     :param v: Variance for the q distribution for random walk MH
     :param N: Number of iterations. Set None to run indefinitely
     :param threads: Run the code in parallel (will make use of floor(threads / 2) * 2 threads if threads > 1)
@@ -49,6 +54,8 @@ def metropolis_hastings_iterator(data, Theta0, v, N=None, threads=1, load_state=
     else:
         theta = np.log(Theta0)
         yield theta
+        if not inside_bounds(Theta0, prior_bounds):
+            raise ValueError(f"Theta0 {Theta0} is not in prior bounds {prior_bounds}")
         ll = forward.log_likelihood_dataset(data, Theta0, threads=threads)
 
     logging.info("Start")
@@ -61,7 +68,7 @@ def metropolis_hastings_iterator(data, Theta0, v, N=None, threads=1, load_state=
     while t != N:  # works if N is None
         logging.info(f"t={t}")
 
-        theta_new, ll_new, alpha = _mh_one_iteration(data, theta, ll, v, threads)
+        theta_new, ll_new, alpha = _mh_one_iteration(data, theta, prior_bounds, ll, v, threads)
         logging.info(f"alpha={alpha:.5f}")
         alphas.append(alpha)
         logging.info(f"Accepted points: {accepted_count}, "
@@ -85,7 +92,7 @@ def metropolis_hastings_iterator(data, Theta0, v, N=None, threads=1, load_state=
         t += 1
 
 
-def metropolis_hastings_fixed_count(data, Theta0, v, count, threads=1, save_intermediate=None,
+def metropolis_hastings_fixed_count(data, Theta0, prior_bounds, v, count, threads=1, save_intermediate=None,
                                     load_state=None, save_state=None):
     """
     Run Metropolis-Hastings simulation on data under the SIR model, starting at `Theta0`.
@@ -97,6 +104,7 @@ def metropolis_hastings_fixed_count(data, Theta0, v, count, threads=1, save_inte
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta0: Initial (alpha, beta) of the SIR model
+    :param prior_bounds: Bounds of the uniform prior (non-logarithmic)
     :param v: Variance for the q distribution for random walk MH
     :param count: Number of points to output
     :param threads: Run the code in parallel (will make use of floor(threads / 2) * 2 threads if threads > 1)
@@ -116,8 +124,8 @@ def metropolis_hastings_fixed_count(data, Theta0, v, count, threads=1, save_inte
     else:
         points = []
 
-    for point in metropolis_hastings_iterator(data, Theta0, v, N=None, threads=threads, load_state=load_state,
-                                              save_state=save_state):
+    for point in metropolis_hastings_iterator(data, Theta0, prior_bounds, v, N=None, threads=threads,
+                                              load_state=load_state, save_state=save_state):
 
         if save_intermediate is not None:
             with open(save_intermediate, "a") as f:
