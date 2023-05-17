@@ -1,7 +1,9 @@
 import datetime as dt
 import os
+from functools import partial
 from os.path import join
 
+import arviz
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -11,17 +13,17 @@ from matplotlib import rcParams
 from matplotlib.colors import ListedColormap
 from matplotlib.ticker import FuncFormatter
 
-import data
 import tensir
-from paths import AUSTRIA_MONTHLY_HMC_POINTS_DIR, PLOTS_DIR, AUSTRIA_MONTHLY_HMC_PLOT_PATH, AUSTRIA_DATA_CACHE_PATH, \
-    AUSTRIA_TIMELINE_PLOT_PATH
+from paths import PLOTS_DIR, AUSTRIA_DATA_CACHE_PATH, AUSTRIA_TIMELINE_PLOT_PATH, HMC_POINTS_DIR, MH_POINTS_DIR, \
+    HMC_PLOT_PATH, MH_PLOT_PATH, HMC_TRACES_DIR, MH_TRACES_DIR, HMC_ESS_PATH, MH_ESS_PATH
+from tensir import data
 
 rcParams["text.usetex"] = True
 sns.set_style("whitegrid", {"xtick.bottom": True, "ytick.left": True, "axes.edgecolor": "0.15",
                             "font.family": "serif", "font.serif": ["Computer Modern"]})
 
 
-def density_plots(show=False, output_stats=False):
+def density_plots(sampling, show=False, output_stats=False):
     levels = 5
     burn_in = 10  # number of points of each run to skip
     xlim = (0.01, 0.3)
@@ -29,9 +31,17 @@ def density_plots(show=False, output_stats=False):
     smooth = 3.5
     thresh = 0.02
 
+    if sampling == "hmc":
+        points_dir = HMC_POINTS_DIR
+        plot_path = HMC_PLOT_PATH
+
+    elif sampling == "mh":
+        points_dir = MH_POINTS_DIR
+        plot_path = MH_PLOT_PATH
+
     data_files = []
     for m in range(3, 9):
-        month_dir = join(AUSTRIA_MONTHLY_HMC_POINTS_DIR, f"{m:02d}")
+        month_dir = join(points_dir, f"{m:02d}")
         os.makedirs(month_dir, exist_ok=True)
         month_files = [join(month_dir, f) for f in os.listdir(month_dir)]
         data_files.append(month_files)
@@ -70,10 +80,13 @@ def density_plots(show=False, output_stats=False):
             print(f"({title}) Loaded {len(files)} files with cumulatively {len(points)} points (skipped {skipped})")
             print(f"Mean (only accepted): {np.exp(np.mean(points, axis=0))}")
 
-        sns.kdeplot(ax=ax, x=data_x, y=data_y, shade=True, cmap=cmap, bw_adjust=smooth, thresh=thresh, levels=levels)
+        sns.kdeplot(ax=ax, x=data_x, y=data_y, fill=True, cmap=cmap, bw_adjust=smooth, thresh=thresh, levels=levels)
         ax.scatter(*np.log(Theta_grid), s=40, marker="x", color="black")
 
-        # ax.scatter(data_x, data_y, color="black", s=1)
+        # enable to also plot points
+        ax.scatter(data_x, data_y, color="black", s=1)
+
+        # ax.scatter(*np.random.normal(loc=-3, scale=0.2, size=(2,60)))
 
         ax.axline((0, 0), (1, 1), linestyle="--", linewidth=1, color="black")
 
@@ -85,7 +98,7 @@ def density_plots(show=False, output_stats=False):
         ax.set_yticks(np.log(np.logspace(-3, -1, 3)))
         ax.set_yticks(np.log([np.linspace(1, 9, 9) * 10 ** i for i in range(-3, 0)]).flatten(), minor=True)
 
-        ax.grid(b=True, which="minor", ls="--", linewidth=0.3)
+        ax.grid(which="minor", ls="--", linewidth=0.3)
 
         ax.set_xlim(np.log(xlim))
         ax.set_ylim(np.log(ylim))
@@ -101,8 +114,120 @@ def density_plots(show=False, output_stats=False):
 
     os.makedirs(PLOTS_DIR, exist_ok=True)
 
-    fig.savefig(AUSTRIA_MONTHLY_HMC_PLOT_PATH + ".png")
-    fig.savefig(AUSTRIA_MONTHLY_HMC_PLOT_PATH + ".pdf")
+    fig.savefig(plot_path + ".png")
+    fig.savefig(plot_path + ".pdf")
+    if show:
+        fig.show()
+
+
+def trace_plot(sampling, show=False):
+    if sampling == "hmc":
+        points_dir = HMC_POINTS_DIR
+        traces_dir = HMC_TRACES_DIR
+
+    elif sampling == "mh":
+        points_dir = MH_POINTS_DIR
+        traces_dir = MH_TRACES_DIR
+
+    os.makedirs(traces_dir, exist_ok=True)
+
+    for m in range(3, 9):
+        month_dir = join(points_dir, f"{m:02d}")
+        os.makedirs(month_dir, exist_ok=True)
+
+        for c, file in enumerate(sorted(os.listdir(month_dir))):
+            with open(join(month_dir, file), "r") as f:
+                lines = f.readlines()
+
+            alphas, betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
+
+            fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10, 5), dpi=300)
+
+            ax1.plot(range(1, len(alphas) + 1), alphas)
+            ax2.plot(range(1, len(betas) + 1), betas)
+
+            ax1.set_ylabel("alpha")
+            ax2.set_ylabel("beta")
+
+            fig.suptitle(f"Month: {m}, Chain: {c}")
+            fig.tight_layout()
+
+            fig.savefig(join(traces_dir, f"{sampling}-trace-{m:02d}-{c:02d}.png"))
+            if show:
+                fig.show()
+
+            plt.close()
+
+
+def diagnostics_plot(sampling, metric, show=False):
+    if sampling == "hmc":
+        points_dir = HMC_POINTS_DIR
+        ess_path = HMC_ESS_PATH
+
+    elif sampling == "mh":
+        points_dir = MH_POINTS_DIR
+        ess_path = MH_ESS_PATH
+
+    if metric == "ess":
+        func = partial(arviz.ess, method="folded")
+    elif metric == "rhat":
+        func = partial(arviz.rhat, method="folded")
+
+    fig, axes = plt.subplots(6, 2, figsize=(5, 15), dpi=300)
+
+    for m, axs in enumerate(axes, start=3):
+        month_dir = join(points_dir, f"{m:02d}")
+
+        os.makedirs(month_dir, exist_ok=True)
+
+        all_alphas = []
+        all_betas = []
+
+        for c, file in enumerate(sorted(os.listdir(month_dir))):
+            with open(join(month_dir, file), "r") as f:
+                lines = f.readlines()
+
+            chain_alphas, chain_betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
+            all_alphas.append(chain_alphas)
+            all_betas.append(chain_betas)
+
+        if len(all_alphas) == 0:
+            continue
+
+        min_size = min(len(l) for l in all_alphas + all_betas)
+        all_alphas = [l[:min_size] for l in all_alphas]
+        all_betas = [l[:min_size] for l in all_betas]
+
+        all_alphas = np.array(all_alphas)
+        all_betas = np.array(all_betas)
+
+        es_alpha = []
+        es_beta = []
+        for t in range(5, all_alphas.shape[1]):
+            es_alpha.append(func(all_alphas[:, :t]))
+            es_beta.append(func(all_betas[:, :t]))
+
+        ax1, ax2 = axs
+
+        ax1.plot(es_alpha)
+        ax2.plot(es_beta)
+
+        for ax in axs:
+            if metric == "ess":
+                ax.set_ylim(0, all_alphas.size)
+            elif metric == "rhat":
+                ax.set_ylim(1, 1.5)
+                ax.axhline(1.1, color="black", linestyle="--")
+
+        ax1.set_ylabel(str(m))
+
+    axes[0][0].set_title("alpha")
+    axes[0][1].set_title("beta")
+
+    fig.suptitle(f"{sampling} {metric}")
+    fig.tight_layout()
+
+    fig.savefig(ess_path + ".png")
     if show:
         fig.show()
 
@@ -155,9 +280,17 @@ def timeline_plot(show=False):
 
 
 def main():
-    # density_plots(show=True, output_stats=True)
-    trace_plot(show=True)
-    # psrf_plot(show=True)
+    density_plots("hmc", show=True, output_stats=True)
+    # density_plots("mh", show=True, output_stats=True)
+
+    # trace_plot("hmc", show=True)
+    # trace_plot("mh", show=True)
+
+    # diagnostics_plot("hmc", metric="ess", show=True)
+    # diagnostics_plot("hmc", metric="rhat", show=True)
+    # diagnostics_plot("mh", metric="ess", show=True)
+    # diagnostics_plot("mh", metric="rhat", show=True)
+
     # timeline_plot(show=True)
 
 

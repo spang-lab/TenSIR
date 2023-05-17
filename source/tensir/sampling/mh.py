@@ -1,48 +1,20 @@
 import logging
-import os.path
-import os.path
+import os
 import pickle
 import time
 
 import numpy as np
 
-from tensir.uniformization import derivative, forward
+from tensir.uniformization import forward
 
 
-def _leapfrog(data, theta, p, M_i, e, grad, threads):
-    if grad is None:  # take previous gradient if available
-        grad, ll = derivative.log_likelihood_gradient_dataset_cached(data, np.exp(theta), threads)
-        logging.info(f"      Theta: {np.exp(theta)}, Gradient: {grad}, LL: {ll}, p: {p}")
-        if np.any(grad == np.inf):  # exit if gradient = inf
-            return theta, p, ll, grad
-    p = p + e * 0.5 * grad
-    theta = theta + e * np.dot(M_i, p)
-    grad, ll = derivative.log_likelihood_gradient_dataset_cached(data, np.exp(theta), threads)
-    logging.info(f"      Theta: {np.exp(theta)}, Gradient: {grad}, LL: {ll}, p: {p}")
-    p = p + e * 0.5 * grad
-    return theta, p, ll, grad
+def _mh_one_iteration(data, theta, ll, v, threads):
+    theta_new = np.random.normal(theta, np.sqrt(v), size=2)
 
+    ll_new = forward.log_likelihood_dataset(data, np.exp(theta_new), threads=threads)
+    alpha = min(1, np.exp(ll_new - ll))  # likelihood is being held logarithmically
 
-def _hmc_one_iteration(data, theta, ll, M, M_i, e, L, threads):
-    p = np.random.multivariate_normal(np.zeros(2), M)
-
-    theta_new, p_new, ll_new, grad_new = theta, p, None, None
-    for i in range(L):
-        logging.info(f"  i={i}, ll={ll if ll_new is None else ll_new}")
-        theta_new, p_new, ll_new, grad_new = _leapfrog(data, theta_new, p_new, M_i, e, grad_new, threads)
-        if np.any(grad_new == np.inf):
-            logging.warning("Gradient has inf, aborting leapfrogs")
-            break
-
-    # already calculated in leapfrog as a by-product of derivative.log_likelihood_gradient_dataset
-    # ll_new = forward.log_likelihood_dataset(data, np.exp(theta_new), threads=threads)
-
-    a_new = ll_new - 0.5 * np.dot(np.dot(p_new, M_i), p_new)
-    a = ll - 0.5 * np.dot(np.dot(p, M_i), p)
-    alpha = min(1, np.exp(a_new - a))  # subtract here instead of dividing outside of exp
-
-    if a_new == -np.inf or np.any(grad_new == np.inf):
-        alpha = 0.
+    logging.info(f"Theta: {np.exp(theta_new)}, ll={ll_new}")
 
     if np.random.random() < 1 - alpha:  # discard with probability 1 - alpha
         logging.info(f"Discarded")
@@ -51,9 +23,9 @@ def _hmc_one_iteration(data, theta, ll, M, M_i, e, L, threads):
     return theta_new, ll_new, alpha
 
 
-def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load_state=None, save_state=None):
+def metropolis_hastings_iterator(data, Theta0, v, N=None, threads=1, load_state=None, save_state=None):
     """
-    Run Hamiltonian Monte Carlo simulation on data under the SIR model, starting at `Theta0`.
+    Run Metropolis-Hastings simulation on data under the SIR model, starting at `Theta0`.
     This function acts as a generator that yields the next `(log(alpha), log(beta))` point.
     Per default it runs indefinitely, except `N` is set.
 
@@ -63,15 +35,12 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta0: Initial (alpha, beta) of the SIR model
-    :param M: Covariance matrix of the HMC
-    :param e: Epsilon parameter of the HMC
-    :param L: L parameter of the HMC
+    :param v: Variance for the q distribution for random walk MH
     :param N: Number of iterations. Set None to run indefinitely
     :param threads: Run the code in parallel (will make use of floor(threads / 2) * 2 threads if threads > 1)
     :param load_state: Path to a file where to load a generator state. Setting this will replace Theta0.
     :param save_state: Path to a file where to save the generator state after each generated point
     """
-
     if load_state is not None and os.path.exists(load_state):
         with open(load_state, "rb") as f:
             theta, ll, numpy_state = pickle.load(f)
@@ -85,8 +54,6 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
     logging.info("Start")
     start = time.time()
 
-    M_i = np.linalg.inv(M)
-
     accepted_count = 1
     alphas = []
 
@@ -94,12 +61,11 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
     while t != N:  # works if N is None
         logging.info(f"t={t}")
 
-        theta_new, ll_new, alpha = _hmc_one_iteration(data, theta, ll, M, M_i, e, L, threads)
-
+        theta_new, ll_new, alpha = _mh_one_iteration(data, theta, ll, v, threads)
         logging.info(f"alpha={alpha:.5f}")
         alphas.append(alpha)
         logging.info(f"Accepted points: {accepted_count}, "
-                     f"Average HMC alpha: {sum(alphas) / len(alphas):.3f}, "
+                     f"Average MH alpha: {sum(alphas) / len(alphas):.3f}, "
                      f"{(time.time() - start) / (t + 1):.2f} s/point")
 
         if theta_new is None:  # point proposal got rejected
@@ -119,10 +85,10 @@ def hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=1, load
         t += 1
 
 
-def hamiltonian_monte_carlo_fixed_count(data, Theta0, M, e, L, count, threads=1, save_intermediate=None,
-                                        load_state=None, save_state=None):
+def metropolis_hastings_fixed_count(data, Theta0, v, count, threads=1, save_intermediate=None,
+                                    load_state=None, save_state=None):
     """
-    Run Hamiltonian Monte Carlo simulation on data under the SIR model, starting at `Theta0`.
+    Run Metropolis-Hastings simulation on data under the SIR model, starting at `Theta0`.
     Returns a list of `count` points of `(log(alpha), log(beta))` parameters.
 
     Supports loading/saving the internal state to resume a run at the last generated (accepted or unaccepted) point.
@@ -131,9 +97,7 @@ def hamiltonian_monte_carlo_fixed_count(data, Theta0, M, e, L, count, threads=1,
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta0: Initial (alpha, beta) of the SIR model
-    :param M: Covariance matrix of the HMC
-    :param e: Epsilon parameter of the HMC
-    :param L: L parameter of the HMC
+    :param v: Variance for the q distribution for random walk MH
     :param count: Number of points to output
     :param threads: Run the code in parallel (will make use of floor(threads / 2) * 2 threads if threads > 1)
     :param save_intermediate: Path to a csv file where to save intermediate points. Loads points from this file if it
@@ -152,8 +116,8 @@ def hamiltonian_monte_carlo_fixed_count(data, Theta0, M, e, L, count, threads=1,
     else:
         points = []
 
-    for point in hamilton_monte_carlo_iterator(data, Theta0, M, e, L, N=None, threads=threads, load_state=load_state,
-                                               save_state=save_state):
+    for point in metropolis_hastings_iterator(data, Theta0, v, N=None, threads=threads, load_state=load_state,
+                                              save_state=save_state):
 
         if save_intermediate is not None:
             with open(save_intermediate, "a") as f:

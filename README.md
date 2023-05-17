@@ -25,7 +25,7 @@ The **x** marks the least squares estimate after grid search using the default d
 
 ### Prerequisites
 
-- Python 3.7+ with Pip (tested with Python 3.9 and 3.10)
+- Python 3.9+ (tested with Python 3.9)
 
 ### Setup
 
