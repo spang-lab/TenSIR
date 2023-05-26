@@ -1,5 +1,6 @@
 import datetime as dt
 import os
+from enum import Enum
 from functools import partial
 from os.path import join
 
@@ -8,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import typer
 from matplotlib import cm, dates, ticker
 from matplotlib import rcParams
 from matplotlib.colors import ListedColormap
@@ -15,7 +17,7 @@ from matplotlib.ticker import FuncFormatter
 
 import tensir
 from paths import PLOTS_DIR, AUSTRIA_DATA_CACHE_PATH, AUSTRIA_TIMELINE_PLOT_PATH, HMC_POINTS_DIR, MH_POINTS_DIR, \
-    HMC_PLOT_PATH, MH_PLOT_PATH, HMC_TRACES_DIR, MH_TRACES_DIR, HMC_ESS_PATH, MH_ESS_PATH
+    HMC_PLOT_PATH, MH_PLOT_PATH, HMC_ESS_PATH, MH_ESS_PATH
 from tensir import data
 
 rcParams["text.usetex"] = True
@@ -23,9 +25,19 @@ sns.set_style("whitegrid", {"xtick.bottom": True, "ytick.left": True, "axes.edge
                             "font.family": "serif", "font.serif": ["Computer Modern"]})
 
 
-def density_plots(sampling, show=False, output_stats=False):
+class Sampling(str, Enum):
+    HMC = "hmc"
+    MH = "mh"
+
+
+app = typer.Typer()
+
+
+@app.command()
+def density(sampling: Sampling = typer.Option(..., ),
+            output_stats: bool = False):
     levels = 5
-    burn_in = 10  # number of points of each run to skip
+    burn_in = 100  # number of points of each run to skip
     xlim = (0.01, 0.3)
     ylim = (0.01, 0.3)
     smooth = 3.5
@@ -116,47 +128,46 @@ def density_plots(sampling, show=False, output_stats=False):
 
     fig.savefig(plot_path + ".png")
     fig.savefig(plot_path + ".pdf")
-    if show:
-        fig.show()
 
 
-def trace_plot(sampling, show=False):
-    if sampling == "hmc":
-        points_dir = HMC_POINTS_DIR
-        traces_dir = HMC_TRACES_DIR
+@app.command()
+def trace(month: int = typer.Option(...),
+          run: int = typer.Option(...)):
+    fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", figsize=(10, 5), dpi=300)
 
-    elif sampling == "mh":
-        points_dir = MH_POINTS_DIR
-        traces_dir = MH_TRACES_DIR
+    # HMC
+    hmc_path = join(HMC_POINTS_DIR, f"{month:02d}", f"hmc-points-{month:02d}-{run:02d}.csv")
+    with open(hmc_path, "r") as f:
+        lines = f.readlines()
 
-    os.makedirs(traces_dir, exist_ok=True)
+    alphas, betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
+    axes[0][0].plot(alphas)
+    axes[1][0].plot(betas)
 
-    for m in range(3, 9):
-        month_dir = join(points_dir, f"{m:02d}")
-        os.makedirs(month_dir, exist_ok=True)
+    # MH
+    mh_path = join(MH_POINTS_DIR, f"{month:02d}", f"mh-points-{month:02d}-{run:02d}.csv")
+    with open(mh_path, "r") as f:
+        lines = f.readlines()
 
-        for c, file in enumerate(sorted(os.listdir(month_dir))):
-            with open(join(month_dir, file), "r") as f:
-                lines = f.readlines()
+    alphas, betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
+    axes[0][1].plot(alphas)
+    axes[1][1].plot(betas)
 
-            alphas, betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
+    # headers
+    axes[0][0].set_title("HMC")
+    axes[0][1].set_title("MH")
+    axes[0][0].set_ylabel(r"$\alpha$", rotation=0)
+    axes[1][0].set_ylabel(r"$\beta$", rotation=0)
 
-            fig, (ax1, ax2) = plt.subplots(nrows=2, figsize=(10, 5), dpi=300)
+    # limits
+    for row in axes:
+        for col in row:
+            col.set_xlim(0, len(alphas))
 
-            ax1.plot(range(1, len(alphas) + 1), alphas)
-            ax2.plot(range(1, len(betas) + 1), betas)
+    fig.tight_layout()
 
-            ax1.set_ylabel("alpha")
-            ax2.set_ylabel("beta")
-
-            fig.suptitle(f"Month: {m}, Chain: {c}")
-            fig.tight_layout()
-
-            fig.savefig(join(traces_dir, f"{sampling}-trace-{m:02d}-{c:02d}.png"))
-            if show:
-                fig.show()
-
-            plt.close()
+    fig.savefig(join(PLOTS_DIR, "trace.png"))
+    fig.savefig(join(PLOTS_DIR, "trace.pdf"))
 
 
 def diagnostics_plot(sampling, metric, show=False):
@@ -279,20 +290,5 @@ def timeline_plot(show=False):
         fig.show()
 
 
-def main():
-    density_plots("hmc", show=True, output_stats=True)
-    # density_plots("mh", show=True, output_stats=True)
-
-    # trace_plot("hmc", show=True)
-    # trace_plot("mh", show=True)
-
-    # diagnostics_plot("hmc", metric="ess", show=True)
-    # diagnostics_plot("hmc", metric="rhat", show=True)
-    # diagnostics_plot("mh", metric="ess", show=True)
-    # diagnostics_plot("mh", metric="rhat", show=True)
-
-    # timeline_plot(show=True)
-
-
 if __name__ == '__main__':
-    main()
+    app()
