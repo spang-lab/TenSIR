@@ -7,17 +7,36 @@ from os.path import join
 import numpy as np
 import typer
 
+import tensir
 from paths import AUSTRIA_DATA_CACHE_PATH, HMC_STATES_DIR, MH_LOGS_DIR, \
     HMC_LOGS_DIR, MH_POINTS_DIR, HMC_POINTS_DIR, MH_STATES_DIR
-from tensir import data
 from tensir.bounds_util import inside_bounds
 from tensir.sampling.hmc import hamiltonian_monte_carlo_fixed_count
 from tensir.sampling.mh import metropolis_hastings_fixed_count
+from tensir.uniformization import forward
 
 
 class Sampling(str, Enum):
     HMC = "hmc"
     MH = "mh"
+
+
+def draw_Theta0(
+        data_sir: np.ndarray, prior_bounds: tuple[float, float], mu: float, std: float, threads: int
+) -> np.ndarray:
+    logging.info("Drawing Theta0")
+    while True:
+        Theta0 = np.exp(np.random.normal(loc=mu, scale=std, size=2))
+        logging.info(f"Candidate Theta0: {Theta0}")
+
+        inside = inside_bounds(Theta0, prior_bounds)
+        logging.info(f"Inside bounds? {inside}")
+
+        finite = np.isfinite(forward.log_likelihood_dataset(data_sir, Theta0, threads=threads))
+        logging.info(f"Finite LL? {finite}")
+
+        if inside and finite:
+            return Theta0
 
 
 def main(
@@ -59,9 +78,9 @@ def main(
     os.makedirs(intermediate_dir, exist_ok=True)
     os.makedirs(states_dir, exist_ok=True)
 
-    data_sir = data.covid19_austria_daily(start=f"2020-{month:02d}-01",
-                                          end=f"2020-{month + 1:02d}-01",
-                                          cache_path=AUSTRIA_DATA_CACHE_PATH)
+    data_sir = tensir.data.covid19_austria_daily(start=f"2020-{month:02d}-01",
+                                                 end=f"2020-{month + 1:02d}-01",
+                                                 cache_path=AUSTRIA_DATA_CACHE_PATH)
 
     np.random.seed(seed)
     name = f"{sampling}-points-{month:02d}-{run:02d}"
@@ -73,9 +92,7 @@ def main(
     prior_bounds = (0.01, 1.)
 
     # parameters are in the log normally distributed with a mean of about 0.05
-    Theta0 = np.exp(np.random.normal(loc=-3, scale=0.2, size=2))
-    while not inside_bounds(Theta0, prior_bounds):
-        Theta0 = np.exp(np.random.normal(loc=-3, scale=0.2, size=2))
+    Theta0 = draw_Theta0(data_sir, prior_bounds, mu=-3, std=0.2, threads=threads)
 
     if sampling == Sampling.HMC:
         points = hamiltonian_monte_carlo_fixed_count(data_sir, Theta0=Theta0, prior_bounds=prior_bounds,
