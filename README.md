@@ -28,7 +28,8 @@ The **x** marks the least squares estimate after grid search using the default d
 ### Prerequisites
 
 - Python 3.9+ (tested with Python 3.9). For installation instructions please refer to [the documentation][python]. Also
-  make sure that Python and Pip are [in your PATH][path] and reachable from a terminal via `python3` and `pip3`.
+  make sure that Python and Pip are [in your PATH][path] and reachable from a terminal/Powershell via `python3` and
+  `pip3`.
 
 ### Setup
 
