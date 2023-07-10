@@ -3,6 +3,15 @@ from scipy.integrate import odeint
 
 
 def solve_sir(SIR0, Theta, duration, steps):
+    """
+    Deterministically solves the SIR differential equations.
+
+    :param SIR0: The initial SIR state as a triplet.
+    :param Theta: (alpha, beta) tuple
+    :param duration: The duration in days
+    :param steps: Number of steps for the output
+    :return: Solution values
+    """
     S0, I0, R0 = SIR0
     N = np.sum(SIR0)
     alpha, beta = Theta

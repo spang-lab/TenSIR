@@ -16,6 +16,15 @@ def _calculate_error(data, Theta, duration, steps):
 
 
 def grid_search_deterministic(data, Theta_min, Theta_max, resolution):
+    """
+    Find the Theta that best explains the data under the deterministic ODE model via grid search.
+
+    :param data: The data
+    :param Theta_min: Lower limit of the grid
+    :param Theta_max: Upper limit of the grid
+    :param resolution: Resolution per axis of the grid
+    :return: The best Theta
+    """
     duration = data[-1, 0] - data[0, 0]
     steps = data.shape[0]
 

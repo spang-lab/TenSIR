@@ -135,7 +135,7 @@ def _uniformization(args):
 
 def log_likelihood_dataset(data, Theta, threads=1):
     """
-    Calculate the log-likelihood of parameter `theta` on `data` under the SIR model.
+    Calculate the log-likelihood of parameter `Theta` on `data` under the SIR model.
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta: [alpha, beta] of the SIR model

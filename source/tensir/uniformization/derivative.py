@@ -233,4 +233,7 @@ def log_likelihood_gradient_dataset(data, Theta, threads=1):
 
 @cached(cache={}, key=lambda d, T, t: hashkey(tuple(map(tuple, d)), tuple(T)))
 def log_likelihood_gradient_dataset_cached(data, Theta, threads):
+    """
+    Like log_likelihood_gradient_dataset() but caches the result values of given (data, Theta) pairs.
+    """
     return log_likelihood_gradient_dataset(data, Theta, threads)

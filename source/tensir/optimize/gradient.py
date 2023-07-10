@@ -7,7 +7,7 @@ from tensir.uniformization import derivative
 
 def gradient_ascent(data, Theta0, lr, conv, threads=1):
     """
-    Learns the parameter `theta` on `data` under the SIR model, starting at `theta0`.
+    Learns the parameter `theta` on `data` under the SIR model, starting at `Theta0`.
 
     :param data: Numpy array with columns t, S, I, R
     :param Theta0: Initial (alpha, beta) of the SIR model
