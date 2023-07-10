@@ -40,16 +40,29 @@ def draw_Theta0(
 
 
 def main(
-        sampling: Sampling = typer.Option(...),
-        points: int = typer.Option(...),
-        month: int = typer.Option(...),
-        run: int = typer.Option(...),
-        threads: int = typer.Option(...),
-        hmc_m: float = 2.,
-        hmc_e: float = 0.05,
-        hmc_l: int = 5,
-        mh_v: float = 0.1
+        sampling: Sampling = typer.Option(..., help="Sampling algorithm to use (either 'hmc' or 'mh')."),
+        points: int = typer.Option(..., help="Number of points to create."),
+        month: int = typer.Option(
+            ..., help="Select a specific month (3-8) from the dataset as the data for the simulation."),
+        run: int = typer.Option(
+            ..., help="Specify a run. This value only influences the seed (via 'seed = month * 1000 + run') to keep "
+                      "the results reproducible."),
+        threads: int = typer.Option(
+            ..., help="Number of concurrent threads to use. Set to 1 to disable concurrency. Vanishing returns for "
+                      "threads > 60."),
+        hmc_m: float = typer.Option(
+            2.0, help="Sets the M parameter to 'M = I * hmc_m' where I is the identity matrix. Only used for HMC."),
+        hmc_e: float = typer.Option(0.05, help="Sets the epsilon parameter. Only used for HMC."),
+        hmc_l: int = typer.Option(5, help="Sets the L parameter. Only used for HMC."),
+        mh_v: float = typer.Option(0.1, help="Sets the v parameter (variance of the distribution). Only used for MH.")
 ):
+    """
+    Generate/sample points from the posterior of the SIR model.
+
+    By default, this script continues with the last generated point if it was prematurely stopped previously. For this
+    to work, the contents of the 'cache' directory and the 'intermediate' directories of the 'results/<sampling>-points'
+    directories must be kept intact.
+    """
     seed = month * 1000 + run
 
     if sampling == Sampling.HMC:

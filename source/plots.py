@@ -31,10 +31,10 @@ class Sampling(str, Enum):
 app = typer.Typer()
 
 
-@app.command()
-def density(sampling: Sampling = typer.Option(..., ),
-            scatter: bool = False,
-            output_stats: bool = False):
+@app.command(help="Create a density plot(s).")
+def density(sampling: Sampling = typer.Option(..., help="Specify the results of which sampler to use."),
+            scatter: bool = typer.Option(False, help="Whether to scatter the points themselves on the KDE plot."),
+            output_stats: bool = typer.Option(False, help="Whether to output statistics to the terminal.")):
     levels = 5
     burn_in = 200  # number of points of each run to skip
     xlim = (0.01, 0.3)
@@ -128,9 +128,9 @@ def density(sampling: Sampling = typer.Option(..., ),
     fig.savefig(join(PLOTS_DIR, f"density-{sampling}.pdf"))
 
 
-@app.command()
-def trace(month: int = typer.Option(...),
-          run: int = typer.Option(...)):
+@app.command(help="Create a trace plot(s).")
+def trace(month: int = typer.Option(..., help="Select a month (3-8)"),
+          run: int = typer.Option(..., help="Select a run")):
     fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", figsize=(10, 5), dpi=300)
 
     burnin = 200
@@ -176,8 +176,8 @@ def trace(month: int = typer.Option(...),
     fig.savefig(join(PLOTS_DIR, f"trace-{month:02d}-{run:02d}.pdf"))
 
 
-@app.command()
-def autocorrelation(month: int = typer.Option(...)):
+@app.command(help="Create an autocorrelation plot(s).")
+def autocorrelation(month: int = typer.Option(..., help="Select a month (3-8)")):
     burnin = 200
 
     fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", figsize=(10, 5), dpi=300)
@@ -217,7 +217,7 @@ def autocorrelation(month: int = typer.Option(...)):
     fig.savefig(join(PLOTS_DIR, f"autocorrelation-{month:02d}.pdf"))
 
 
-@app.command()
+@app.command(help="Create the timeline plot(s).")
 def timeline():
     rcParams["axes.labelsize"] = 15
     rcParams["xtick.labelsize"] = 15
@@ -265,7 +265,7 @@ def timeline():
     fig.savefig(join(PLOTS_DIR, f"timeline.pdf"))
 
 
-@app.command()
+@app.command(help="Create all plot(s).")
 def all():
     timeline()
 
