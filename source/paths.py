@@ -16,7 +16,7 @@ MH_TRACES_DIR = join(PLOTS_DIR, "mh-traces")
 HMC_ESS_PATH = join(PLOTS_DIR, "hmc-ess")
 MH_ESS_PATH = join(PLOTS_DIR, "mh-ess")
 
-AUSTRIA_TIMELINE_PLOT_PATH = join(PLOTS_DIR, "austria-timeline")
+AUSTRIA_TIMELINE_PLOT_PATH = join(PLOTS_DIR, "timeline")
 
 CACHE_DIR = join(PROJECT_ROOT, "cache")
 AUSTRIA_DATA_CACHE_PATH = join(CACHE_DIR, "data-austria.csv")

@@ -1,7 +1,6 @@
 import datetime as dt
 import os
 from enum import Enum
-from functools import partial
 from os.path import join
 
 import arviz
@@ -16,8 +15,7 @@ from matplotlib.colors import ListedColormap
 from matplotlib.ticker import FuncFormatter
 
 import tensir
-from paths import PLOTS_DIR, AUSTRIA_DATA_CACHE_PATH, AUSTRIA_TIMELINE_PLOT_PATH, HMC_POINTS_DIR, MH_POINTS_DIR, \
-    HMC_PLOT_PATH, MH_PLOT_PATH, HMC_ESS_PATH, MH_ESS_PATH
+from paths import PLOTS_DIR, AUSTRIA_DATA_CACHE_PATH, HMC_POINTS_DIR, MH_POINTS_DIR
 from tensir import data
 
 rcParams["text.usetex"] = True
@@ -35,21 +33,20 @@ app = typer.Typer()
 
 @app.command()
 def density(sampling: Sampling = typer.Option(..., ),
+            scatter: bool = False,
             output_stats: bool = False):
     levels = 5
-    burn_in = 100  # number of points of each run to skip
+    burn_in = 200  # number of points of each run to skip
     xlim = (0.01, 0.3)
     ylim = (0.01, 0.3)
-    smooth = 3.5
-    thresh = 0.02
+    smooth = 5
+    thresh = 0.002
 
     if sampling == "hmc":
         points_dir = HMC_POINTS_DIR
-        plot_path = HMC_PLOT_PATH
 
     elif sampling == "mh":
         points_dir = MH_POINTS_DIR
-        plot_path = MH_PLOT_PATH
 
     data_files = []
     for m in range(3, 9):
@@ -96,7 +93,8 @@ def density(sampling: Sampling = typer.Option(..., ),
         ax.scatter(*np.log(Theta_grid), s=40, marker="x", color="black")
 
         # enable to also plot points
-        ax.scatter(data_x, data_y, color="black", s=1)
+        if scatter:
+            ax.scatter(data_x, data_y, color="black", s=1)
 
         # ax.scatter(*np.random.normal(loc=-3, scale=0.2, size=(2,60)))
 
@@ -126,8 +124,8 @@ def density(sampling: Sampling = typer.Option(..., ),
 
     os.makedirs(PLOTS_DIR, exist_ok=True)
 
-    fig.savefig(plot_path + ".png")
-    fig.savefig(plot_path + ".pdf")
+    fig.savefig(join(PLOTS_DIR, f"density-{sampling}.png"))
+    fig.savefig(join(PLOTS_DIR, f"density-{sampling}.pdf"))
 
 
 @app.command()
@@ -135,14 +133,18 @@ def trace(month: int = typer.Option(...),
           run: int = typer.Option(...)):
     fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", figsize=(10, 5), dpi=300)
 
+    burnin = 200
+
     # HMC
     hmc_path = join(HMC_POINTS_DIR, f"{month:02d}", f"hmc-points-{month:02d}-{run:02d}.csv")
     with open(hmc_path, "r") as f:
         lines = f.readlines()
 
     alphas, betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
-    axes[0][0].plot(alphas)
-    axes[1][0].plot(betas)
+    axes[0][0].plot(range(0, burnin), alphas[:burnin], color="grey")
+    axes[0][0].plot(range(burnin, 1000), alphas[burnin:], color="tab:blue")
+    axes[1][0].plot(range(0, burnin), betas[:burnin], color="grey")
+    axes[1][0].plot(range(burnin, 1000), betas[burnin:], color="tab:blue")
 
     # MH
     mh_path = join(MH_POINTS_DIR, f"{month:02d}", f"mh-points-{month:02d}-{run:02d}.csv")
@@ -150,8 +152,10 @@ def trace(month: int = typer.Option(...),
         lines = f.readlines()
 
     alphas, betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
-    axes[0][1].plot(alphas)
-    axes[1][1].plot(betas)
+    axes[0][1].plot(range(0, burnin), alphas[:burnin], color="grey")
+    axes[0][1].plot(range(burnin, 1000), alphas[burnin:], color="tab:blue")
+    axes[1][1].plot(range(0, burnin), betas[:burnin], color="grey")
+    axes[1][1].plot(range(burnin, 1000), betas[burnin:], color="tab:blue")
 
     # headers
     axes[0][0].set_title("HMC")
@@ -166,84 +170,55 @@ def trace(month: int = typer.Option(...),
 
     fig.tight_layout()
 
-    fig.savefig(join(PLOTS_DIR, "trace.png"))
-    fig.savefig(join(PLOTS_DIR, "trace.pdf"))
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    fig.savefig(join(PLOTS_DIR, f"trace-{month:02d}-{run:02d}.png"))
+    fig.savefig(join(PLOTS_DIR, f"trace-{month:02d}-{run:02d}.pdf"))
 
 
-def diagnostics_plot(sampling, metric, show=False):
-    if sampling == "hmc":
-        points_dir = HMC_POINTS_DIR
-        ess_path = HMC_ESS_PATH
+@app.command()
+def autocorrelation(month: int = typer.Option(...)):
+    burnin = 200
 
-    elif sampling == "mh":
-        points_dir = MH_POINTS_DIR
-        ess_path = MH_ESS_PATH
+    fig, axes = plt.subplots(nrows=2, ncols=2, sharex="col", sharey="row", figsize=(10, 5), dpi=300)
 
-    if metric == "ess":
-        func = partial(arviz.ess, method="folded")
-    elif metric == "rhat":
-        func = partial(arviz.rhat, method="folded")
+    for param, row in enumerate(axes):
 
-    fig, axes = plt.subplots(6, 2, figsize=(5, 15), dpi=300)
+        for ax, sampling in zip(row, ("hmc", "mh")):
 
-    for m, axs in enumerate(axes, start=3):
-        month_dir = join(points_dir, f"{m:02d}")
+            chains = []
+            for run in range(10):
+                with open(f"results/{sampling}-points/{month:02d}/{sampling}-points-{month:02d}-{run:02d}.csv",
+                          "r") as f:
+                    lines = f.readlines()
 
-        os.makedirs(month_dir, exist_ok=True)
+                lines = [l.strip().split(",") for l in lines]
+                pairs = [(float(a), float(b)) for a, b in lines]
 
-        all_alphas = []
-        all_betas = []
+                chains.append([p[param] for p in pairs])
 
-        for c, file in enumerate(sorted(os.listdir(month_dir))):
-            with open(join(month_dir, file), "r") as f:
-                lines = f.readlines()
+            data = np.array(chains)[:, burnin:]
 
-            chain_alphas, chain_betas = zip(*[[float(v) for v in l.strip().split(",")] for l in lines])
-            all_alphas.append(chain_alphas)
-            all_betas.append(chain_betas)
+            arviz.plot_autocorr(data, max_lag=50, ax=ax)
 
-        if len(all_alphas) == 0:
-            continue
+            ax.set_title("")
 
-        min_size = min(len(l) for l in all_alphas + all_betas)
-        all_alphas = [l[:min_size] for l in all_alphas]
-        all_betas = [l[:min_size] for l in all_betas]
+    # headers
+    axes[0][0].set_title("HMC")
+    axes[0][1].set_title("MH")
+    axes[0][0].set_ylabel(r"$\alpha$", rotation=0)
+    axes[1][0].set_ylabel(r"$\beta$", rotation=0)
 
-        all_alphas = np.array(all_alphas)
-        all_betas = np.array(all_betas)
-
-        es_alpha = []
-        es_beta = []
-        for t in range(5, all_alphas.shape[1]):
-            es_alpha.append(func(all_alphas[:, :t]))
-            es_beta.append(func(all_betas[:, :t]))
-
-        ax1, ax2 = axs
-
-        ax1.plot(es_alpha)
-        ax2.plot(es_beta)
-
-        for ax in axs:
-            if metric == "ess":
-                ax.set_ylim(0, all_alphas.size)
-            elif metric == "rhat":
-                ax.set_ylim(1, 1.5)
-                ax.axhline(1.1, color="black", linestyle="--")
-
-        ax1.set_ylabel(str(m))
-
-    axes[0][0].set_title("alpha")
-    axes[0][1].set_title("beta")
-
-    fig.suptitle(f"{sampling} {metric}")
     fig.tight_layout()
 
-    fig.savefig(ess_path + ".png")
-    if show:
-        fig.show()
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    fig.savefig(join(PLOTS_DIR, f"autocorrelation-{month:02d}.png"))
+    fig.savefig(join(PLOTS_DIR, f"autocorrelation-{month:02d}.pdf"))
 
 
-def timeline_plot(show=False):
+@app.command()
+def timeline():
     rcParams["axes.labelsize"] = 15
     rcParams["xtick.labelsize"] = 15
 
@@ -284,10 +259,22 @@ def timeline_plot(show=False):
 
     fig.tight_layout()
 
-    fig.savefig(AUSTRIA_TIMELINE_PLOT_PATH + ".png")
-    fig.savefig(AUSTRIA_TIMELINE_PLOT_PATH + ".pdf")
-    if show:
-        fig.show()
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    fig.savefig(join(PLOTS_DIR, f"timeline.png"))
+    fig.savefig(join(PLOTS_DIR, f"timeline.pdf"))
+
+
+@app.command()
+def all():
+    timeline()
+
+    for month in range(3, 9):
+        autocorrelation(month)
+        trace(month, run=0)
+
+    for sampling in (Sampling.HMC, Sampling.MH):
+        density(sampling)
 
 
 if __name__ == '__main__':
