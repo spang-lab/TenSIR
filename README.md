@@ -42,8 +42,8 @@ pip3 install -r requirements.txt
 
 ### Generating points
 
-To exactly reproduce our results, one should use the [generate-points.py] script. For example to generate 1000 points
-using HMC sampling, for month March (3) in run number 0 with 16 threads do:
+To exactly reproduce our results, one should use the [generate-points.py] script. For example, to generate 1000 points
+using HMC sampling for month March (3) in run number 0 with 16 threads, do:
 
 ```bash
 python3 source/generate-points.py --sampling hmc --points 1000 --month 3 --run 0 --threads 16
