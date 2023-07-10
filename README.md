@@ -60,6 +60,8 @@ The random number generator is seeded uniquely for each run by `seed = month * 1
 Technically any thread count can be set, but vanishing returns are expected for thread counts greater than 60.
 The runs are independent and can be computed in parallel on e.g. different compute nodes.
 
+The defaults for the parameters have been used in the paper's results.
+
 #### Leveraging HPC clusters
 
 Especially for months March, April and August the simulation can take quite some time. We suggest you use a compute
