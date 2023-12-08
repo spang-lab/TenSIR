@@ -216,6 +216,19 @@ python source/evaluation.py tables
 python source/evaluation.py density-plot 
 python source/evaluation.py timeline-plot 
 python source/evaluation.py trace-plot --month 5 --chain 0
+
+# for supplement additionally
+python source/evaluation.py trace-plot --month 3 --chain 0
+python source/evaluation.py trace-plot --month 4 --chain 0
+python source/evaluation.py trace-plot --month 6 --chain 0
+python source/evaluation.py trace-plot --month 7 --chain 0
+python source/evaluation.py trace-plot --month 8 --chain 0
+python source/evaluation.py autocorrelation-plot --month 3
+python source/evaluation.py autocorrelation-plot --month 4
+python source/evaluation.py autocorrelation-plot --month 5
+python source/evaluation.py autocorrelation-plot --month 6
+python source/evaluation.py autocorrelation-plot --month 7
+python source/evaluation.py autocorrelation-plot --month 8
 ```
 
 </details>

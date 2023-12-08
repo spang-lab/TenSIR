@@ -219,5 +219,36 @@ def density_plot(scatter: bool = typer.Option(False, help="Add the underlying po
     fig.savefig(join(PLOTS_DIR, f"density.pdf"))
 
 
+@app.command(help="Create an autocorrelation plot in the ./results/plots directory.")
+def autocorrelation_plot(month: int = typer.Option(..., help="Select a month (3-8)")):
+    data = load_data()
+
+    fig, axeses = plt.subplots(2, 2, sharex="col", sharey="row", figsize=(10, 5), dpi=300)
+
+    for i, axes in enumerate(axeses):
+
+        for j, ax in enumerate(axes):
+            samples = data[j][month - 3].posterior.theta[:, :, i]
+
+            arviz.plot_autocorr(samples, max_lag=50, ax=ax)
+
+            ax.set_title("")
+
+    # headers
+    axeses[0][0].set_title("HMC")
+    axeses[0][1].set_title("MH")
+    axeses[0][0].set_ylabel(r"$\alpha$", rotation=90, size=16)
+    axeses[1][0].set_ylabel(r"$\beta$", rotation=90, size=16)
+
+    # fig.suptitle(f"Autocorrelation plot month {month}")
+
+    fig.tight_layout()
+
+    os.makedirs(PLOTS_DIR, exist_ok=True)
+
+    fig.savefig(join(PLOTS_DIR, f"autocorrelation-{month:02d}.png"))
+    fig.savefig(join(PLOTS_DIR, f"autocorrelation-{month:02d}.pdf"))
+
+
 if __name__ == "__main__":
     app()
