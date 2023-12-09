@@ -258,11 +258,11 @@ repository's structure:
 │   └── plots/                 Target for generated plots
 ├── source/                    Directory containing all source code
 │   ├── tensir/                Module containing all the library functionality (not intended to be used via public CLI)
-│   │   ├── optimize/          Module containing optimization routines (deterministic ODE solver, grid search,
-│   │   │                      gradient ascent)
-│   │   ├── sampling/          Module containing the implementation of samplers (MH and HMC)
-│   │   └── uniformization/    Implementation of the derivative and forward evaluation via uniformization (research
-│   │                          object of this paper)
+│   │   ├── optimize/          Module containing optimization routines for debugging (deterministic ODE solver,
+│   │   │                      grid search, gradient ascent)
+│   │   ├── uniformization/    Implementation of the derivative and forward evaluation via uniformization (research
+│   │   │                      object of this paper)
+│   │   └── data.py            Functions for loading data
 │   ├── evaluation.py          Main script to generate the plots
 │   └── generate-points.py     Main script to generate, i.e. sample, points
 └── requirements.txt           Text file containing all dependencies (adhering to the Python convention)
